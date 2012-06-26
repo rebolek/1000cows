@@ -240,10 +240,12 @@ max-cows: 1
 cow-ctx: context [
 	framerate: 12 ; none
 	frametime: none
+	actual-frametime: 0
 	cows: copy []		; all animated objects
 	timer: none 		; timer ID
 	drop-frame?: false
 	dropped: 0
+	do-on-refresh: none	; function to do on refresh
 
 	timer-cb: [
 		; timer callback function
@@ -256,22 +258,21 @@ cow-ctx: context [
 			face/facets/img: first images
 			face/facets/images: images
 			do-actor face 'on-timer none	; face specific action (TODO: should it pass something?) 
-			draw-face face
+			unless drop-frame? [
+				draw-face face
+			]
 		]
 		; update all cows
 		unless drop-frame? [
-			show-now last cows ; ?
+		;	show-now window-face? last cows ; ?
+			show get in window-face? last cows 'gob
 		]
-		t: now/time/precise - t
-		; TODO: run some user-defined common action
-		; FIXME: this is hardcoded action, see above
-		;
-		set-face tx rejoin ["Total cows count: " length? cows " (mem usage: " stats "), took " t "."]
+		actual-frametime: now/time/precise - t
+		do-on-refresh
 		
-		either t > frametime [	; frame processing took more than frametime
+		either actual-frametime >= frametime [	; frame processing took more than frametime
 			set 'drop-frame? true
-			set 'dropped dropped + 1
-		;	print ["WARNING!!!" dropped t]
+			++ dropped
 		][
 			set 'drop-frame? false
 		]
@@ -330,6 +331,9 @@ stylize [
 				do-actor face 'on-set-images anims/1 ; HC
 			]
 			on-timer: [
+			;	size: face/facets/gob-size + -2x-2 + random 3x3
+			;	face/facets/max-size: size
+			;	resize-face face size
 				if all [get-facet face 'explosion? 1 = length? face/facets/images][
 					cow-ctx/remove-cow face
 				]
@@ -378,6 +382,12 @@ make-cow: does [compose/deep [cow options [show-mode: 'fixed max-size: (10x10 + 
 
 cows: collect [loop 10 [keep make-cow]]
 
+refresh-func: func [] [
+	set-face tx rejoin ["Total cows count: " length? cow-ctx/cows " (mem usage: " stats "), took " cow-ctx/actual-frametime ", dropped frames: " cow-ctx/dropped "."]
+]
+
+cow-ctx/do-on-refresh: :refresh-func
+
 view [
 	p: hpanel 600x600 cows
 	hpanel [
@@ -389,6 +399,9 @@ view [
 		]
 	]
 	tx: text "Total cows count: xx"
+;	when [enter] on-action [
+;		cow-ctx/do-on-refresh: refresh-func
+;	]
 ]
 
 halt
