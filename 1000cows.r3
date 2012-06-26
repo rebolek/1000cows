@@ -239,11 +239,15 @@ max-cows: 1
 
 cow-ctx: context [
 	framerate: 12 ; none
-	cows: copy []	; all animated objects
-	timer: none 	; timer ID
+	frametime: none
+	cows: copy []		; all animated objects
+	timer: none 		; timer ID
+	drop-frame?: false
+	dropped: 0
 
 	timer-cb: [
 		; timer callback function
+		t: now/time/precise
 		foreach face cows [
 			; advance to next image and check boundary
 			images: face/facets/images
@@ -251,15 +255,27 @@ cow-ctx: context [
 			if tail? images [images: head images]
 			face/facets/img: first images
 			face/facets/images: images
-			do-actor face 'on-timer none	; face specific action
+			do-actor face 'on-timer none	; face specific action (TODO: should it pass something?) 
 			draw-face face
 		]
 		; update all cows
+		unless drop-frame? [
+			show-now last cows ; ?
+		]
+		t: now/time/precise - t
 		; TODO: run some user-defined common action
-		set-face t join "Total cows count: " length? cows
-		
+		; FIXME: this is hardcoded action, see above
 		;
-		show-now last cows ; ?
+		set-face tx rejoin ["Total cows count: " length? cows " (mem usage: " stats "), took " t "."]
+		
+		either t > frametime [	; frame processing took more than frametime
+			set 'drop-frame? true
+			set 'dropped dropped + 1
+		;	print ["WARNING!!!" dropped t]
+		][
+			set 'drop-frame? false
+		]
+		
 	]
 
 	add-cow: func [cow][
@@ -275,7 +291,8 @@ cow-ctx: context [
 	init-cows: func[][
 		if none? timer [
 ;			timer: set-timer/repeat bind/copy timer-cb cow-ctx to time! 1 / framerate
-			timer: set-timer/repeat :timer-cb to time! 1 / framerate
+			frametime: to time! 1 / framerate
+			timer: set-timer/repeat :timer-cb frametime
 		]
 	]
 ]
@@ -321,8 +338,10 @@ stylize [
 				]
 			]
 			on-click: [
-				face/facets/images: krava/explosion
-				set-facet face 'explosion? true
+				unless get-facet face 'explosion? [
+					face/facets/images: krava/explosion
+					set-facet face 'explosion? true
+				]
 			] 
 		]
 	]
@@ -355,19 +374,21 @@ foreach anim krava/anims [
 	append/only anims data
 ]
 
-cows: collect [loop 10 [keep compose/deep [cow options [show-mode: 'fixed gob-offset: (random 500x500)]]]]
+make-cow: does [compose/deep [cow options [show-mode: 'fixed max-size: (10x10 + random 100x100) gob-offset: (random 500x500)]]]
+
+cows: collect [loop 10 [keep make-cow]]
 
 view [
 	p: hpanel 600x600 cows
 	hpanel [
 		button "add cow" on-action [
-			append-content p compose/deep [cow options [show-mode: 'fixed gob-offset: (random 500x500)]]
+			append-content p make-cow
 		]
 		button "add 10 cows" on-action [
-			loop 10 [append-content p compose/deep [cow options [show-mode: 'fixed gob-offset: (random 500x500)]]]
+			loop 10 [append-content p make-cow]
 		]
 	]
-	t: text "Total cows count: xx"
+	tx: text "Total cows count: xx"
 ]
 
 halt
