@@ -241,6 +241,7 @@ stylize [
 			init-size: 42x36
 			max-size: 42x36
 			show-mode: 'fixed
+			bg-color: none
 
 			sequence: krava/anims/1
 			timer: none
@@ -249,7 +250,7 @@ stylize [
 			on-init: [
 				do-actor/style face 'on-init arg 'image
 				index: face/facets/sequence/1
-				set-facet face 'face face ; we need reference to intself for callback function
+				set-facet face 'face face ; we need reference to itself for callback function
 				set-facet face 'img krava/images/:index
 
 				set-facet face 'timer-cb bind/copy [
@@ -284,4 +285,4 @@ view [
 	]
 ]
 
-halt
+;halt
