@@ -3,9 +3,11 @@ REBOL[
 	Author: "Boleslav Brezovsky"
 	To-do: "Cow explosion on click"
 	Purpose: "Show how to use R3 timers in R3 GUI"
+	Notes: "Advanced Visual Animation Rebol Kontext"
 ]
 
-do http://www.saphirion.com/development/downloads-2/files/r3-gui.r3
+;do http://www.saphirion.com/development/downloads-2/files/r3-gui.r3
+do %r3-gui.r3
 
 cowcount: 1000
 
@@ -235,36 +237,93 @@ advance: func [block][
 
 max-cows: 1
 
-stylize [
-	cow: image [
-		facets: [
-			init-size: 42x36
-			max-size: 42x36
-			show-mode: 'fixed
-			bg-color: none
+cow-ctx: context [
+	framerate: 12 ; none
+	cows: copy []	; all animated objects
+	timer: none 	; timer ID
 
-			sequence: krava/anims/1
+	timer-cb: [
+		; timer callback function
+		foreach face cows [
+			; advance to next image and check boundary
+			images: face/facets/images
+			images: next images
+			if tail? images [images: head images]
+			face/facets/img: first images
+			face/facets/images: images
+			do-actor face 'on-timer none	; face specific action
+			draw-face face
+		]
+		; update all cows
+		; TODO: run some user-defined common action
+		set-face t join "Total cows count: " length? cows
+		
+		;
+		show-now last cows ; ?
+	]
+
+	add-cow: func [cow][
+		append cows cow
+		init-cows
+	]
+	
+	remove-cow: func [cow][
+		remove find cows cow
+		; TODO: check if cow exists
+	]
+	
+	init-cows: func[][
+		if none? timer [
+;			timer: set-timer/repeat bind/copy timer-cb cow-ctx to time! 1 / framerate
+			timer: set-timer/repeat :timer-cb to time! 1 / framerate
+		]
+	]
+]
+
+stylize [
+	anob: image [
+		facets: [
+			bg-color: none	; remove after R3GUI is updated
+			
+			images: copy []
 			timer: none
+			timer-cb: none
+		]
+		options: [
+			images: [block!]
 		]
 		actors: [
 			on-init: [
 				do-actor/style face 'on-init arg 'image
-				index: face/facets/sequence/1
-				set-facet face 'face face ; we need reference to itself for callback function
-				set-facet face 'img krava/images/:index
-
-				set-facet face 'timer-cb bind/copy [
-					facets/sequence: advance facets/sequence
-					index: facets/sequence/1
-					facets/img: krava/images/:index
-					draw-face facets/face
-					; do not update each cow on its own
-					if facets/anob-index = max-cows [
-						show-now facets/face
-					]
-				] face
-				set-facet face 'timer set-timer/repeat face/facets/timer-cb 0:0:0.08 ;  12.5 fps
+				cow-ctx/add-cow face
 			]
+			on-set-images: [ ; on-set ?
+				; ARG: block of images
+				set-facet face 'images arg 
+			]
+		]
+	]
+	cow: anob [
+		facets: [
+			max-size: 42x36
+		]
+		actors: [
+			on-init: [
+				do-actor/style face 'on-init arg 'anob
+				do-actor face 'on-set-images anims/1 ; HC
+			]
+			on-timer: [
+				if all [get-facet face 'explosion? 1 = length? face/facets/images][
+					cow-ctx/remove-cow face
+				]
+				if equal? index? face/facets/images length? head face/facets/images [
+					face/facets/images: get first random anims
+				]
+			]
+			on-click: [
+				face/facets/images: krava/explosion
+				set-facet face 'explosion? true
+			] 
 		]
 	]
 ]
@@ -277,7 +336,7 @@ repeat i max-cows [
 ]
 
 
-view [
+[
 	p: hpanel 600x600 panel
 	button "add cow" on-action [
 		set 'max-cows max-cows + 1
@@ -285,4 +344,30 @@ view [
 	]
 ]
 
-;halt
+
+; prepare animations
+anims: copy []
+foreach anim krava/anims [
+	data: copy []
+	foreach i anim [
+		append data krava/images/:i
+	]
+	append/only anims data
+]
+
+cows: collect [loop 10 [keep compose/deep [cow options [show-mode: 'fixed gob-offset: (random 500x500)]]]]
+
+view [
+	p: hpanel 600x600 cows
+	hpanel [
+		button "add cow" on-action [
+			append-content p compose/deep [cow options [show-mode: 'fixed gob-offset: (random 500x500)]]
+		]
+		button "add 10 cows" on-action [
+			loop 10 [append-content p compose/deep [cow options [show-mode: 'fixed gob-offset: (random 500x500)]]]
+		]
+	]
+	t: text "Total cows count: xx"
+]
+
+halt
